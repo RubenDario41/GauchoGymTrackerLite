@@ -1,4 +1,4 @@
-package com.example.gimnasio
+package com.example.gauchogymtrackerlite
 
 import org.junit.Test
 

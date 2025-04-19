@@ -1,3 +1,5 @@
 <resources>
-    <string name="app_name">Gimnasio</string>
+    <string name="app_name">GauchoGymTrackerLite</string>
+    <string name="hint_repeticiones">Repeticiones</string>
+    <string name="boton_comenzar">Comenzar</string>
 </resources>
