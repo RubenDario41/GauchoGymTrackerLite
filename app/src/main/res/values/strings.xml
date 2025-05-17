@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">GauchoGymTrackerLite</string>
+    <string name="settings_button_description">Ajustes</string>
+    <string name="add_routine_button_description">Añadir rutina</string>
+</resources>
