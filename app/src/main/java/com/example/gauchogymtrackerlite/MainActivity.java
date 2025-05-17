@@ -1,129 +1,154 @@
-package com.example.gauchogymtrackerlite; // <-- ¡¡ASEGÚRATE DE QUE ESTE ES TU PAQUETE!!
+package com.example.gauchogymtrackerlite;
+import com.example.gauchogymtrackerlite.AppDatabase;
 
-// Imports necesarios
 import android.content.Intent;
-import android.content.SharedPreferences; // Para leer preferencias
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.app.AppCompatDelegate; // Para aplicar el tema
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
-// import androidx.activity.EdgeToEdge;
+import androidx.fragment.app.DialogFragment;
+import androidx.fragment.app.FragmentManager;
 
-// Imports de Activities
 import com.example.gauchogymtrackerlite.RoutinesActivity;
 import com.example.gauchogymtrackerlite.HistoryActivity;
 import com.example.gauchogymtrackerlite.SettingsActivity;
 import com.example.gauchogymtrackerlite.ActiveExerciseActivity;
+import com.example.gauchogymtrackerlite.SelectRoutineDialogFragment;
+import com.example.gauchogymtrackerlite.Routine;
+import com.example.gauchogymtrackerlite.AppDatabase; // Importar AppDatabase
+import com.example.gauchogymtrackerlite.RoutineDao;  // Importar RoutineDao
 
-// Import específico para MaterialButton si lo usas directamente
 import com.google.android.material.button.MaterialButton;
 
+import java.util.ArrayList; // Importar ArrayList
+import java.util.List;      // Importar List
+import java.util.concurrent.ExecutorService; // Importar ExecutorService
 
-public class MainActivity extends AppCompatActivity {
 
-    // Constantes para SharedPreferences (pueden ser las mismas que en SettingsActivity)
+public class MainActivity extends AppCompatActivity implements SelectRoutineDialogFragment.SelectRoutineListener {
+
     private static final String PREFS_NAME = "AppSettingsPrefs";
     private static final String PREF_NIGHT_MODE = "NightMode";
-
     private static final String TAG = "MainActivity";
 
-    // Variables de UI (si las necesitas como miembro)
     private MaterialButton startButton;
     private MaterialButton routinesButton;
     private MaterialButton historyButton;
     private View settingsButton;
 
+    private RoutineDao routineDao; // Para acceder a la BD
+    private ExecutorService databaseExecutor; // Para hilos de BD
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        // --- APLICAR TEMA GUARDADO ANTES DE TODO ---
-        applySavedTheme(); // Llamamos a nuestro nuevo método
-        // --- FIN APLICAR TEMA ---
-
-        super.onCreate(savedInstanceState); // Llamada a super después de aplicar tema
-
-        // EdgeToEdge.enable(this);
-
+        applySavedTheme();
+        super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        Log.d(TAG, "onCreate: Iniciando y layout inflado.");
 
-        // Código opcional Insets...
+        // Obtener instancia de la BD y DAO
+        AppDatabase db = AppDatabase.getDatabase(getApplicationContext());
+        routineDao = db.routineDao();
+        databaseExecutor = AppDatabase.databaseWriteExecutor;
+
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
             return insets;
         });
 
-
-        // --- Inicialización y DIAGNÓSTICO con findViewById ---
-         Log.d(TAG, "Buscando vistas...");
         startButton = findViewById(R.id.startButton);
         routinesButton = findViewById(R.id.routinesButton);
         historyButton = findViewById(R.id.historyButton);
         settingsButton = findViewById(R.id.settingsButton);
 
-        // Comprobaciones null...
-        if (startButton == null) Log.e(TAG, "ERROR: startButton no encontrado!"); else Log.d(TAG, "startButton encontrado.");
-        if (routinesButton == null) Log.e(TAG, "ERROR: routinesButton no encontrado!"); else Log.d(TAG, "routinesButton encontrado.");
-        if (historyButton == null) Log.e(TAG, "ERROR: historyButton no encontrado!"); else Log.d(TAG, "historyButton encontrado.");
-        if (settingsButton == null) Log.e(TAG, "ERROR: settingsButton no encontrado!"); else Log.d(TAG, "settingsButton encontrado.");
-
-
-        // --- Asignación de OnClickListeners ---
-         Log.d(TAG, "Asignando Listeners...");
-        // ... (Código de los listeners que ya tenías y funcionaba) ...
         if (routinesButton != null) {
             routinesButton.setOnClickListener(v -> {
-                Log.d(TAG, "Click en routinesButton");
                 Intent intent = new Intent(MainActivity.this, RoutinesActivity.class);
                 startActivity(intent);
             });
-        } else { Log.w(TAG, "Listener no asignado a routinesButton (null)."); }
+        }
 
         if (historyButton != null) {
             historyButton.setOnClickListener(v -> {
-                Log.d(TAG, "Click en historyButton");
                 Intent intent = new Intent(MainActivity.this, HistoryActivity.class);
                 startActivity(intent);
             });
-        } else { Log.w(TAG, "Listener no asignado a historyButton (null)."); }
+        }
 
         if (settingsButton != null) {
             settingsButton.setOnClickListener(v -> {
-                Log.d(TAG, "Click en settingsButton");
                 Intent intent = new Intent(MainActivity.this, SettingsActivity.class);
                 startActivity(intent);
             });
-        } else { Log.w(TAG, "Listener no asignado a settingsButton (null)."); }
+        }
 
         if (startButton != null) {
             startButton.setOnClickListener(v -> {
-                Log.d(TAG, "Click en startButton");
-                Toast.makeText(MainActivity.this, "Iniciar Entrenamiento Próximamente", Toast.LENGTH_SHORT).show();
+                Log.d(TAG, "Click en startButton, iniciando carga de rutinas para diálogo...");
+                loadRoutinesAndShowDialog();
             });
-        } else { Log.w(TAG, "Listener no asignado a startButton (null)."); }
+        }
+    }
 
-        Log.d(TAG, "onCreate: Fin del método.");
-    } // Fin onCreate
-
-
-    // --- MÉTODO NUEVO PARA APLICAR TEMA ---
     private void applySavedTheme() {
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         int nightMode = prefs.getInt(PREF_NIGHT_MODE, AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
         if (AppCompatDelegate.getDefaultNightMode() != nightMode) {
-             Log.d(TAG, "Aplicando modo noche guardado: " + nightMode);
             AppCompatDelegate.setDefaultNightMode(nightMode);
-            // No es necesario recrear aquí, super.onCreate lo manejará
-        } else {
-             Log.d(TAG, "Modo noche actual (" + AppCompatDelegate.getDefaultNightMode() + ") ya coincide con el guardado (" + nightMode + "). No se aplica cambio.");
         }
     }
-    // --- FIN MÉTODO NUEVO ---
 
-} // Fin clase MainActivity
+    private void loadRoutinesAndShowDialog() {
+        Toast.makeText(this, "Cargando rutinas...", Toast.LENGTH_SHORT).show(); // Feedback al usuario
+        databaseExecutor.execute(() -> {
+            Log.d(TAG, "loadRoutinesAndShowDialog: Cargando rutinas en background...");
+            final List<Routine> loadedRoutinesList;
+            try {
+                // Si aún usas allowMainThreadQueries, esto es seguro. Si no, también es seguro porque está en executor.
+                loadedRoutinesList = routineDao.getAllRoutines();
+            } catch (Exception e) {
+                Log.e(TAG, "loadRoutinesAndShowDialog: Error cargando rutinas", e);
+                runOnUiThread(() -> Toast.makeText(MainActivity.this, "Error al cargar rutinas", Toast.LENGTH_SHORT).show());
+                return;
+            }
+
+            runOnUiThread(() -> {
+                if (loadedRoutinesList != null && !loadedRoutinesList.isEmpty()) {
+                    Log.d(TAG, "loadRoutinesAndShowDialog: Rutinas cargadas (" + loadedRoutinesList.size() + "), mostrando diálogo.");
+                    
+                    // Convertir List<Routine> a ArrayList<Routine> para el Bundle
+                    ArrayList<Routine> routinesArrayList = new ArrayList<>(loadedRoutinesList);
+
+                    FragmentManager fm = getSupportFragmentManager();
+                    SelectRoutineDialogFragment selectDialog = SelectRoutineDialogFragment.newInstance(routinesArrayList);
+                    selectDialog.show(fm, "SelectRoutineDialogTag"); // Usar un tag diferente
+                } else {
+                    Log.w(TAG, "loadRoutinesAndShowDialog: No hay rutinas para mostrar en el diálogo.");
+                    Toast.makeText(MainActivity.this, "No hay rutinas disponibles para iniciar.", Toast.LENGTH_SHORT).show();
+                }
+            });
+        });
+    }
+
+    @Override
+    public void onRoutineSelected(Routine routine) {
+        if (routine == null) {
+             Log.e(TAG, "onRoutineSelected: La rutina recibida es null.");
+             Toast.makeText(this, "Error al seleccionar rutina.", Toast.LENGTH_SHORT).show();
+             return;
+        }
+        Log.d(TAG, "Rutina seleccionada: ID=" + routine.getRoutineId() + ", Nombre=" + routine.getName());
+        Toast.makeText(this, "Iniciando rutina: " + routine.getName(), Toast.LENGTH_SHORT).show();
+
+        Intent intent = new Intent(MainActivity.this, ActiveExerciseActivity.class);
+        intent.putExtra("ROUTINE_ID", routine.getRoutineId());
+        startActivity(intent);
+    }
+}
